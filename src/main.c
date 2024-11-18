@@ -14,7 +14,10 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/pwm.h>
 
-static const struct pwm_dt_spec pwm_led0 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led0));
+static const struct pwm_dt_spec pwm_led1 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led1));
+static const struct pwm_dt_spec pwm_led2 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led2));
+static const struct pwm_dt_spec pwm_led3 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led3));
+
 
 #define MIN_PERIOD PWM_SEC(1U) / 128U
 #define MAX_PERIOD PWM_SEC(1U)
@@ -28,9 +31,19 @@ int main(void)
 
 	printk("PWM-based blinky\n");
 
-	if (!pwm_is_ready_dt(&pwm_led0)) {
+	if (!pwm_is_ready_dt(&pwm_led1)) {
 		printk("Error: PWM device %s is not ready\n",
-		       pwm_led0.dev->name);
+		       pwm_led1.dev->name);
+		return 0;
+	}
+	if (!pwm_is_ready_dt(&pwm_led2)) {
+		printk("Error: PWM device %s is not ready\n",
+		       pwm_led2.dev->name);
+		return 0;
+	}
+	if (!pwm_is_ready_dt(&pwm_led3)) {
+		printk("Error: PWM device %s is not ready\n",
+		       pwm_led3.dev->name);
 		return 0;
 	}
 
@@ -41,9 +54,9 @@ int main(void)
 	 * Keep its value at least MIN_PERIOD * 4 to make sure
 	 * the sample changes frequency at least once.
 	 */
-	printk("Calibrating for channel %d...\n", pwm_led0.channel);
+	printk("Calibrating for channel %d...\n", pwm_led1.channel);
 	max_period = MAX_PERIOD;
-	while (pwm_set_dt(&pwm_led0, max_period, max_period / 2U)) {
+	while (pwm_set_dt(&pwm_led1, max_period, max_period / 2U)) {
 		max_period /= 2U;
 		if (max_period < (4U * MIN_PERIOD)) {
 			printk("Error: PWM device "
@@ -58,13 +71,22 @@ int main(void)
 
 	period = max_period;
 	while (1) {
-		ret = pwm_set_dt(&pwm_led0, period, period / 2U);
+		ret = pwm_set_dt(&pwm_led1, period, period / 2U);
 		if (ret) {
 			printk("Error %d: failed to set pulse width\n", ret);
 			return 0;
 		}
 		printk("Using period %d\n", period);
-
+		ret = pwm_set_dt(&pwm_led2, period, period / 2U);
+		if (ret) {
+			printk("Error %d: failed to set pulse width\n", ret);
+			return 0;
+		}
+		ret = pwm_set_dt(&pwm_led3, period, period / 2U);
+		if (ret) {
+			printk("Error %d: failed to set pulse width\n", ret);
+			return 0;
+		}
 		period = dir ? (period * 2U) : (period / 2U);
 		if (period > max_period) {
 			period = max_period / 2U;
