@@ -1,3 +1,7 @@
+&uart0 {
+    status = "okay";
+};
+
 &pwm {
 	pinctrl-0 = <&pwm_lego_default>;
 	pinctrl-names = "default";
