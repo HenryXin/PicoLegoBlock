@@ -45,6 +45,40 @@
 	};
 };
 
+&i2c1 {
+	status = "okay";
+	tm1650ledcmd: tm1650ledcmd@24 {
+		compatible = "i2c-device";
+		reg = <0x24>;
+		label = "tm1650ledcmd";
+		status = "okay";
+	};
+	tm1650leddata1: tm1650leddata1@34 {
+		compatible = "i2c-device";
+		reg = <0x34>;
+		label = "tm1650leddata1";
+		status = "okay";
+	};
+	tm1650leddata2: tm1650leddata2@35 {
+		compatible = "i2c-device";
+		reg = <0x35>;
+		label = "tm1650leddata2";
+		status = "okay";
+	};
+	tm1650leddata3: tm1650leddata3@36 {
+		compatible = "i2c-device";
+		reg = <0x36>;
+		label = "tm1650leddata3";
+		status = "okay";
+	};
+	tm1650leddata4: tm1650leddata4@37 {
+		compatible = "i2c-device";
+		reg = <0x37>;
+		label = "tm1650leddata4";
+		status = "okay";
+	};
+};
+
 /{
 	buttons {
 		compatible = "gpio-keys";

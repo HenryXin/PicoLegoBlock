@@ -18,6 +18,11 @@
 
 #define SW0_NODE	DT_ALIAS(sw0)
 #define I2C0_NODE DT_NODELABEL(colorsensor)
+#define I2C1_NODE_LED_CMD DT_NODELABEL(tm1650ledcmd)
+#define I2C1_NODE_LED_DATA1 DT_NODELABEL(tm1650leddata1)
+#define I2C1_NODE_LED_DATA2 DT_NODELABEL(tm1650leddata2)
+#define I2C1_NODE_LED_DATA3 DT_NODELABEL(tm1650leddata3)
+#define I2C1_NODE_LED_DATA4 DT_NODELABEL(tm1650leddata4)
 
 static const struct pwm_dt_spec pwm_led1 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led1));
 static const struct pwm_dt_spec pwm_led2 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led2));
@@ -25,6 +30,11 @@ static const struct pwm_dt_spec pwm_led3 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led3));
 static const struct gpio_dt_spec button = GPIO_DT_SPEC_GET_OR(SW0_NODE, gpios,
 							      {0});
 static const struct i2c_dt_spec dev_i2c = I2C_DT_SPEC_GET(I2C0_NODE);
+static const struct i2c_dt_spec dev_i2c_led_cmd = I2C_DT_SPEC_GET(I2C1_NODE_LED_CMD);
+static const struct i2c_dt_spec dev_i2c_led_data1 = I2C_DT_SPEC_GET(I2C1_NODE_LED_DATA1);
+static const struct i2c_dt_spec dev_i2c_led_data2 = I2C_DT_SPEC_GET(I2C1_NODE_LED_DATA2);
+static const struct i2c_dt_spec dev_i2c_led_data3 = I2C_DT_SPEC_GET(I2C1_NODE_LED_DATA3);
+static const struct i2c_dt_spec dev_i2c_led_data4 = I2C_DT_SPEC_GET(I2C1_NODE_LED_DATA4);
 
 #define MIN_PERIOD PWM_SEC(1U) / 128U
 #define MAX_PERIOD PWM_SEC(1U)
@@ -64,6 +74,44 @@ static const struct i2c_dt_spec dev_i2c = I2C_DT_SPEC_GET(I2C0_NODE);
 /*  Confi Arg  */
 //Control Register 
 #define RST             0x00
+
+// I2C Address definitions
+#define DISPLAY_CMD_ADDR     0x24  // Command address for display control
+#define DISPLAY_DATA_ADDR1   0x34  // Data address for digit 1
+#define DISPLAY_DATA_ADDR2   0x35  // Data address for digit 2
+#define DISPLAY_DATA_ADDR3   0x36  // Data address for digit 3
+#define DISPLAY_DATA_ADDR4   0x37  // Data address for digit 4
+
+// Display control commands
+#define DISPLAY_ON   0x01
+#define DISPLAY_OFF  0x00
+
+// Segment patterns for digits 0-9 and some special characters
+const uint8_t digitPatterns[] = {
+    0x3F, // 0
+    0x06, // 1
+    0x5B, // 2
+    0x4F, // 3
+    0x66, // 4
+    0x6D, // 5
+    0x7D, // 6
+    0x07, // 7
+    0x7F, // 8
+    0x6F, // 9
+    0x77, // A
+    0x7C, // b
+    0x39, // C
+    0x5E, // d
+    0x79, // E
+    0x71  // F
+};
+
+// Function prototypes
+void TM1650_init(void);
+void TM1650_setBrightness(uint8_t brightness);
+void TM1650_displayDigit(uint8_t position, uint8_t digit);
+void TM1650_displayTest(void);
+void TM1650_writeI2C(uint8_t addr, uint8_t data);
 
 static struct gpio_callback button_cb_data;
 
@@ -126,6 +174,32 @@ int main(void)
 		return;
 	}
 
+	if (!device_is_ready(dev_i2c_led_cmd.bus)) {
+		printk("I2C bus %s is not ready!\n\r",dev_i2c_led_cmd.bus->name);
+		return;
+	}
+
+	if (!device_is_ready(dev_i2c_led_data1.bus)) {
+		printk("I2C bus %s is not ready!\n\r",dev_i2c_led_data1.bus->name);
+		return;
+	}
+
+	if (!device_is_ready(dev_i2c_led_data2.bus)) {
+		printk("I2C bus %s is not ready!\n\r",dev_i2c_led_data2.bus->name);
+		return;
+	}
+
+	if (!device_is_ready(dev_i2c_led_data3.bus)) {
+		printk("I2C bus %s is not ready!\n\r",dev_i2c_led_data3.bus->name);
+		return;
+	}
+
+	if (!device_is_ready(dev_i2c_led_data4.bus)) {
+		printk("I2C bus %s is not ready!\n\r",dev_i2c_led_data4.bus->name);
+		return;
+	}
+	
+
 	ret = gpio_pin_configure_dt(&button, GPIO_INPUT);
 	if (ret != 0) {
 		printk("Error %d: failed to configure %s pin %d\n",
@@ -146,7 +220,7 @@ int main(void)
 	printk("Set up button at %s pin %d\n", button.port->name, button.pin);
 
 	RGB_Config();
-
+	TM1650_init();
 	/*
 	 * In case the default MAX_PERIOD value cannot be set for
 	 * some PWM hardware, decrease its value until it can.
@@ -216,6 +290,7 @@ int main(void)
 			printk("Button value: %d\n", val);
 		}
 		ReadColor();
+		TM1650_displayTest();
 		k_sleep(K_SECONDS(4U));
 	}
 	return 0;
@@ -346,4 +421,86 @@ void ReadColor()                 //Get color
 	printk("R:%d, G:%d, B:%d\n", Red, Green, Blue);  
 	printk("val_red:%d, val_green:%d, val_blue:%d\n", val_red, val_green, val_blue);
   //delay(1000);
+}
+
+
+void TM1650_init(void) {
+    // Initialize display with maximum brightness
+    TM1650_writeI2C(DISPLAY_CMD_ADDR, 0x01 | (7 << 4));  // Display ON, brightness level 7
+}
+
+void TM1650_writeI2C(uint8_t addr, uint8_t data) {
+	int ret;
+	switch (addr) {
+		case DISPLAY_CMD_ADDR:
+			ret = i2c_write_dt(&dev_i2c_led_cmd, &data, sizeof(data));
+			break;
+		case DISPLAY_DATA_ADDR1:
+			ret = i2c_write_dt(&dev_i2c_led_data1, &data, sizeof(data));
+			break;
+		case DISPLAY_DATA_ADDR2:
+			ret = i2c_write_dt(&dev_i2c_led_data2, &data, sizeof(data));
+			break;
+		case DISPLAY_DATA_ADDR3:
+			ret = i2c_write_dt(&dev_i2c_led_data3, &data, sizeof(data));
+			break;
+		case DISPLAY_DATA_ADDR4:
+			ret = i2c_write_dt(&dev_i2c_led_data4, &data, sizeof(data));
+			break;
+	}
+}
+
+void TM1650_setBrightness(uint8_t brightness) {
+    if (brightness > 7) brightness = 7;
+    TM1650_writeI2C(DISPLAY_CMD_ADDR, 0x01 | (brightness << 4));
+}
+
+void TM1650_displayDigit(uint8_t position, uint8_t digit) {
+    uint8_t addr;
+    
+    // Select address based on position
+    switch(position) {
+        case 0: addr = DISPLAY_DATA_ADDR1; break;
+        case 1: addr = DISPLAY_DATA_ADDR2; break;
+        case 2: addr = DISPLAY_DATA_ADDR3; break;
+        case 3: addr = DISPLAY_DATA_ADDR4; break;
+        default: return; // Invalid position
+    }
+    
+    if(digit > 15) digit = 0; // Limit to valid range (0-F)
+    TM1650_writeI2C(addr, digitPatterns[digit]);
+}
+
+void TM1650_displayTest(void) {
+    uint8_t i, j;
+    
+    // Test 1: Count from 0-F on all digits
+    for(i = 0; i <= 15; i++) {
+        for(j = 0; j < 4; j++) {
+            TM1650_displayDigit(j, i);
+        }
+        k_sleep(K_MSEC(500)); // Delay 500ms between numbers
+    }
+    
+    // Test 2: Rolling pattern
+    for(i = 0; i < 4; i++) {
+        TM1650_writeI2C(DISPLAY_DATA_ADDR1 + i, 0x00);  // Clear all
+    }
+    
+    for(i = 0; i < 4; i++) {
+        for(j = 0; j < 7; j++) {
+            TM1650_writeI2C(DISPLAY_DATA_ADDR1 + i, (1 << j));
+            k_sleep(K_MSEC(100));
+        }
+    }
+    
+    // Test 3: Brightness levels
+    for(i = 0; i < 4; i++) {
+        TM1650_displayDigit(i, 8);  // Display "8" on all digits
+    }
+    
+    for(i = 0; i <= 7; i++) {
+        TM1650_setBrightness(i);
+        k_sleep(K_MSEC(500));
+    }
 }
