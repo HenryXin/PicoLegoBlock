@@ -34,6 +34,7 @@ static const struct adc_dt_spec adc_channels[] = {
 
 
 #define SW0_NODE	DT_ALIAS(sw0)
+#define MOVEDETECTOR1_NODE	DT_ALIAS(movedetector1)
 #define I2C0_NODE DT_NODELABEL(colorsensor)
 #define I2C1_NODE_LED_CMD DT_NODELABEL(tm1650ledcmd)
 #define I2C1_NODE_LED_DATA1 DT_NODELABEL(tm1650leddata1)
@@ -45,6 +46,8 @@ static const struct pwm_dt_spec pwm_led1 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led1));
 static const struct pwm_dt_spec pwm_led2 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led2));
 static const struct pwm_dt_spec pwm_led3 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led3));
 static const struct gpio_dt_spec button = GPIO_DT_SPEC_GET_OR(SW0_NODE, gpios,
+							      {0});
+static const struct gpio_dt_spec movedetector1 = GPIO_DT_SPEC_GET_OR(MOVEDETECTOR1_NODE, gpios,
 							      {0});
 static const struct i2c_dt_spec dev_i2c = I2C_DT_SPEC_GET(I2C0_NODE);
 static const struct i2c_dt_spec dev_i2c_led_cmd = I2C_DT_SPEC_GET(I2C1_NODE_LED_CMD);
@@ -131,7 +134,7 @@ void TM1650_displayTest(void);
 void TM1650_writeI2C(uint8_t addr, uint8_t data);
 
 static struct gpio_callback button_cb_data;
-
+static struct gpio_callback movedetector1_cb_data;
 uint8_t led_selected = 0;
 unsigned int Red = 0;
 unsigned int Green  = 0;
@@ -151,6 +154,12 @@ void button_pressed(const struct device *dev, struct gpio_callback *cb,
 	if(led_selected>2) {
 		led_selected = 0;
 	}
+}
+
+void movedetector1_pressed(const struct device *dev, struct gpio_callback *cb,
+		    uint32_t pins)
+{
+	printk("Movedetector was activated at %" PRIu32 "\n", k_cycle_get_32());
 }
 
 
@@ -208,7 +217,13 @@ int main(void)
 		       button.port->name);
 		return 0;
 	}
-	
+
+	if (!gpio_is_ready_dt(&movedetector1)) {
+		printk("Error: movedetector device %s is not ready\n",
+		       movedetector1.port->name);
+		return 0;
+	}
+
 	if (!device_is_ready(dev_i2c.bus)) {
 		printk("I2C bus %s is not ready!\n\r",dev_i2c.bus->name);
 		return;
@@ -258,6 +273,25 @@ int main(void)
 	gpio_init_callback(&button_cb_data, button_pressed, BIT(button.pin));
 	gpio_add_callback(button.port, &button_cb_data);
 	printk("Set up button at %s pin %d\n", button.port->name, button.pin);
+
+	ret = gpio_pin_configure_dt(&movedetector1, GPIO_INPUT);
+	if (ret != 0) {
+		printk("Error %d: failed to configure %s pin %d\n",
+		       ret, movedetector1.port->name, movedetector1.pin);
+		return 0;
+	}
+
+	ret = gpio_pin_interrupt_configure_dt(&movedetector1,
+					      GPIO_INT_EDGE_TO_ACTIVE);
+	if (ret != 0) {
+		printk("Error %d: failed to configure interrupt on %s pin %d\n",
+			ret, movedetector1.port->name, movedetector1.pin);
+		return 0;
+	}
+
+	gpio_init_callback(&movedetector1_cb_data, movedetector1_pressed, BIT(movedetector1.pin));
+	gpio_add_callback(movedetector1.port, &movedetector1_cb_data);
+	printk("Set up movedetector at %s pin %d\n", movedetector1.port->name, movedetector1.pin);
 
 	RGB_Config();
 	TM1650_init();
