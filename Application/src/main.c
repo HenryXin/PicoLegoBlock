@@ -45,6 +45,7 @@ static const struct adc_dt_spec adc_channels[] = {
 static const struct pwm_dt_spec pwm_led1 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led1));
 static const struct pwm_dt_spec pwm_led2 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led2));
 static const struct pwm_dt_spec pwm_led3 = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led3));
+static const struct pwm_dt_spec pwm_sound = PWM_DT_SPEC_GET(DT_ALIAS(pwm_sound));
 static const struct gpio_dt_spec button = GPIO_DT_SPEC_GET_OR(SW0_NODE, gpios,
 							      {0});
 static const struct gpio_dt_spec movedetector1 = GPIO_DT_SPEC_GET_OR(MOVEDETECTOR1_NODE, gpios,
@@ -210,8 +211,12 @@ int main(void)
 		       pwm_led3.dev->name);
 		return 0;
 	}
+	if (!pwm_is_ready_dt(&pwm_sound)) {
+		printk("Error: PWM device %s is not ready\n",
+		       pwm_sound.dev->name);
+		return 0;
+	}
 
-	
 	if (!gpio_is_ready_dt(&button)) {
 		printk("Error: button device %s is not ready\n",
 		       button.port->name);
@@ -303,7 +308,7 @@ int main(void)
 	 * the sample changes frequency at least once.
 	 */
 	printk("Calibrating for channel %d...\n", pwm_led1.channel);
-	max_period = MAX_PERIOD;
+	max_period = 3000;
 	while (pwm_set_dt(&pwm_led1, max_period, max_period / 2U)) {
 		max_period /= 2U;
 		if (max_period < (4U * MIN_PERIOD)) {
@@ -317,8 +322,27 @@ int main(void)
 	printk("Done calibrating; maximum/minimum periods %u/%lu nsec\n",
 	       max_period, MIN_PERIOD);
 
+	printk("Calibrating for channel %d...\n", pwm_sound.channel);
+	max_period = MAX_PERIOD;
+	while (pwm_set_dt(&pwm_sound, max_period, max_period / 2U)) {
+		max_period /= 2U;
+		if (max_period < (4U * MIN_PERIOD)) {
+			printk("Error: PWM device "
+			       "does not support a period at least %lu\n",
+			       4U * MIN_PERIOD);
+			return 0;
+		}
+	}
+
+
 	period = max_period;
 	while (1) {
+		ret = pwm_set_dt(&pwm_sound, period, period / 8U);
+		if(ret) {
+			printk("Error %d: failed to set pulse width\n", ret);
+			return 0;
+		}
+
 		if(led_selected == 0) {
 			ret = pwm_set_dt(&pwm_led1, period, period / 2U);
 			if (ret) {
