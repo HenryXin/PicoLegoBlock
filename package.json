@@ -1,0 +1,8 @@
+{
+  "name": "pico-lego-block",
+  "version": "1.0.0",
+  "description": "Pico Lego Block Project",
+  "scripts": {
+    "build": "echo 'No build step required'"
+  }
+}
